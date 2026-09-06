@@ -1,6 +1,3 @@
-ai-engine/__init__.py
-
-python
 """
 AI Engine (Phase 1 interface only)
 ===================================
