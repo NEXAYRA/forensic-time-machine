@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEXAYRA — Phase 1 Timeline Viewer</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #12181f;
+    --line: #232b34;
+    --text: #c9d1d9;
+    --text-dim: #6e7883;
+    --text-bright: #eef2f6;
+    --accent: #5fb3a3;
+    --sev-info: #4a5560;
+    --sev-low: #4a7a8c;
+    --sev-medium: #b98a3d;
+    --sev-high: #b8544a;
+    --sev-critical: #c94f4f;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "SFMono-Regular", "JetBrains Mono", Consolas, Menlo, monospace;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  .wrap {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+  }
+
+  header {
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 20px;
+    margin-bottom: 28px;
+  }
+
+  h1 {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-bright);
+    margin: 0 0 4px;
+    letter-spacing: 0.2px;
+  }
+
+  .subtitle {
+    color: var(--text-dim);
+    font-size: 13px;
+    margin: 0;
+  }
+
+  .disclaimer {
+    margin-top: 14px;
+    padding: 10px 14px;
+    background: var(--panel);
+    border-left: 2px solid var(--accent);
+    color: var(--text-dim);
+    font-size: 12.5px;
+  }
+
+  .stats {
+    display: flex;
+    gap: 32px;
+    margin: 24px 0 32px;
+  }
+
+  .stat .n {
+    font-size: 22px;
+    color: var(--text-bright);
+    font-weight: 600;
+  }
+
+  .stat .l {
+    color: var(--text-dim);
+    font-size: 12px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  thead th {
+    text-align: left;
+    font-weight: 500;
+    color: var(--text-dim);
+    font-size: 12px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  tbody tr {
+    border-bottom: 1px solid var(--line);
+  }
+
+  tbody tr:hover {
+    background: var(--panel);
+  }
+
+  td {
+    padding: 12px;
+    vertical-align: top;
+  }
+
+  .ev-id {
+    color: var(--text-dim);
+    white-space: nowrap;
+  }
+
+  .ts {
+    white-space: nowrap;
+    color: var(--text-dim);
+  }
+
+  .etype {
+    color: var(--text-bright);
+    font-weight: 600;
+  }
+
+  .detail-line {
+    color: var(--text-dim);
+    font-size: 12.5px;
+    margin-top: 3px;
+  }
+
+  .sev {
+    display: inline-block;
+    padding: 2px 8px;
+    font-size: 11.5px;
+    border: 1px solid;
+  }
+  .sev-info     { color: var(--sev-info);     border-color: var(--sev-info); }
+  .sev-low      { color: var(--sev-low);      border-color: var(--sev-low); }
+  .sev-medium   { color: var(--sev-medium);   border-color: var(--sev-medium); }
+  .sev-high     { color: var(--sev-high);     border-color: var(--sev-high); }
+  .sev-critical { color: var(--sev-critical); border-color: var(--sev-critical); }
+
+  .related {
+    font-size: 12.5px;
+  }
+
+  .related-item {
+    color: var(--text-dim);
+    margin-bottom: 2px;
+  }
+
+  .related-item b {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  .related-rule {
+    color: var(--accent);
+  }
+
+  footer {
+    margin-top: 40px;
+    padding-top: 20px;
+    border-top: 1px solid var(--line);
+    color: var(--text-dim);
+    font-size: 12px;
+  }
+
+  footer p { margin: 4px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>NEXAYRA — Phase 1 Timeline Viewer</h1>
+    <p class="subtitle">Synthetic incident reconstruction · investigator preview</p>
+    <div class="disclaimer" id="disclaimer"></div>
+  </header>
+
+  <div class="stats">
+    <div class="stat"><div class="n" id="stat-events">–</div><div class="l">events</div></div>
+    <div class="stat"><div class="n" id="stat-links">–</div><div class="l">correlation links</div></div>
+    <div class="stat"><div class="n" id="stat-span">–</div><div class="l">span</div></div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:90px">event</th>
+        <th style="width:150px">time</th>
+        <th style="width:220px">type / detail</th>
+        <th style="width:90px">severity</th>
+        <th>related events</th>
+      </tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+
+  <footer>
+    <p id="ai-note-1"></p>
+    <p id="ai-note-2"></p>
+  </footer>
+
+</div>
+
+<script>
+  // ------------------------------------------------------------------
+  // Phase-1 note: this file has no build step and no backend call.
+  // The JSON below is the exact output of the Phase-1 pipeline
+  // (validate -> normalize -> timeline -> correlate -> AI interface)
+  // run against sample-data/events/sample_events.json, saved as
+  // sample-data/events/demo_output.json. In Phase 2, replace the
+  // DEMO_DATA constant with a fetch('/demo/timeline') call to the
+  // FastAPI backend (backend/main.py) -- the JSON shape is already
+  // identical, so no rendering code below needs to change.
+  // ------------------------------------------------------------------
+  const DEMO_DATA = {
+  "timeline": {
+    "events": [
+      {
+        "event_id": "EV-001",
+        "timestamp": "2026-01-15T09:41:02+00:00",
+        "event_type": "USER_LOGIN",
+        "source": "auth.log",
+        "host": "WKSTN-07",
+        "actor": "jdoe",
+        "process": null,
+        "file_path": null,
+        "parent_process_id": null,
+        "network": {
+          "src_ip": "10.0.0.15"
+        },
+        "confidence": 1.0,
+        "severity": "info",
+        "evidence_ref": "EV-001",
+        "raw_evidence": {
+          "event_id": "EV-001",
+          "timestamp": "2026-01-15T09:41:02+00:00",
+          "event_type": "user_login",
+          "source": "auth.log",
+          "host": "WKSTN-07",
+          "actor": "jdoe",
+          "confidence": 1.0,
+          "severity": "info",
+          "network": {
+            "src_ip": "10.0.0.15"
+          }
+        },
+        "metadata": {}
+      },
+      {
+        "event_id": "EV-002",
+        "timestamp": "2026-01-15T09:41:18+00:00",
+        "event_type": "PROCESS_START",
+        "source": "edr_agent",
+        "host": "WKSTN-07",
+        "actor": "jdoe",
+        "process": "cmd.exe",
+        "file_path": null,
+        "parent_process_id": null,
+        "network": null,
+        "confidence": 0.95,
+        "severity": "low",
+        "evidence_ref": "EV-002",
+        "raw_evidence": {
+          "event_id": "EV-002",
+          "timestamp": "2026-01-15T09:41:18+00:00",
+          "event_type": "process_start",
+          "source": "edr_agent",
+          "host": "WKSTN-07",
+          "actor": "jdoe",
+          "process": "cmd.exe",
+          "confidence": 0.95,
+          "severity": "low"
+        },
+        "metadata": {}
+      },
+      {
+        "event_id": "EV-003",
+        "timestamp": "2026-01-15T09:41:23+00:00",
+        "event_type": "SCRIPT_EXECUTION",
+        "source": "edr_agent",
+        "host": "WKSTN-07",
+        "actor": "jdoe",
+        "process": "powershell.exe",
+        "file_path": null,
+        "parent_process_id": "cmd.exe",
+        "network": null,
+        "confidence": 0.9,
+        "severity": "high",
+        "evidence_ref": "EV-003",
+        "raw_evidence": {
+          "event_id": "EV-003",
+          "timestamp": "2026-01-15T09:41:23+00:00",
+          "event_type": "script_execution",
+          "source": "edr_agent",
+          "host": "WKSTN-07",
+          "actor": "jdoe",
+          "process": "powershell.exe",
+          "parent_process_id": "cmd.exe",
+          "confidence": 0.9,
+          "severity": "high",
+          "metadata": {
+            "script_name": "update_check.ps1"
+          }
+        },
+        "metadata": {
+          "script_name": "update_check.ps1"
+        }
+      },
+      {
+        "event_id": "EV-004",
+        "timestamp": "2026-01-15T09:41:31+00:00",
+        "event_type": "FILE_CREATE",
+        "source": "edr_agent",
+        "host": "WKSTN-07",
+        "actor": "jdoe",
+        "process": "powershell.exe",
+        "file_path": "C:\\Users\\jdoe\\AppData\\Local\\Temp\\payload.tmp",
+        "parent_process_id": null,
+        "network": null,
+        "confidence": 0.85,
+        "severity": "medium",
+        "evidence_ref": "EV-004",
+        "raw_evidence": {
+          "event_id": "EV-004",
+          "timestamp": "2026-01-15T09:41:31+00:00",
+          "event_type": "file_create",
+          "source": "edr_agent",
+          "host": "WKSTN-07",
+          "actor": "jdoe",
+          "process": "powershell.exe",
+          "file_path": "C:\\Users\\jdoe\\AppData\\Local\\Temp\\payload.tmp",
+          "confidence": 0.85,
+          "severity": "medium"
+        },
+        "metadata": {}
+      }
+    ],
+    "correlations": [
+      {
+        "event_id_a": "EV-001",
+        "event_id_b": "EV-002",
+        "reason": "Both events occurred on host 'WKSTN-07'.",
+        "rule": "same_host"
+      },
+      {
+        "event_id_a": "EV-001",
+        "event_id_b": "EV-002",
+        "reason": "Both events involve actor/user 'jdoe'.",
+        "rule": "same_actor"
+      },
+      {
+        "event_id_a": "EV-001",
+        "event_id_b": "EV-003",
+        "reason": "Both events occurred on host 'WKSTN-07'.",
+        "rule": "same_host"
+      },
+      {
+        "event_id_a": "EV-001",
+        "event_id_b": "EV-003",
+        "reason": "Both events involve actor/user 'jdoe'.",
+        "rule": "same_actor"
+      },
+      {
+        "event_id_a": "EV-001",
+        "event_id_b": "EV-004",
+        "reason": "Both events occurred on host 'WKSTN-07'.",
+        "rule": "same_host"
+      },
+      {
+        "event_id_a": "EV-001",
+        "event_id_b": "EV-004",
+        "reason": "Both events involve actor/user 'jdoe'.",
+        "rule": "same_actor"
+      },
+      {
+        "event_id_a": "EV-002",
+        "event_id_b": "EV-003",
+        "reason": "Both events occurred on host 'WKSTN-07'.",
+        "rule": "same_host"
+      },
+      {
+        "event_id_a": "EV-002",
+        "event_id_b": "EV-003",
+        "reason": "Both events involve actor/user 'jdoe'.",
+        "rule": "same_actor"
+      },
+      {
+        "event_id_a": "EV-002",
+        "event_id_b": "EV-003",
+        "reason": "Process 'powershell.exe' (event EV-003) has parent process 'cmd.exe' (event EV-002).",
+        "rule": "parent_child_process"
+      },
+      {
+        "event_id_a": "EV-002",
+        "event_id_b": "EV-004",
+        "reason": "Both events occurred on host 'WKSTN-07'.",
+        "rule": "same_host"
+      },
+      {
+        "event_id_a": "EV-002",
+        "event_id_b": "EV-004",
+        "reason": "Both events involve actor/user 'jdoe'.",
+        "rule": "same_actor"
+      },
+      {
+        "event_id_a": "EV-003",
+        "event_id_b": "EV-004",
+        "reason": "Both events occurred on host 'WKSTN-07'.",
+        "rule": "same_host"
+      },
+      {
+        "event_id_a": "EV-003",
+        "event_id_b": "EV-004",
+        "reason": "Both events involve actor/user 'jdoe'.",
+        "rule": "same_actor"
+      },
+      {
+        "event_id_a": "EV-003",
+        "event_id_b": "EV-004",
+        "reason": "Both events involve process 'powershell.exe'.",
+        "rule": "same_process"
+      }
+    ]
+  },
+  "ai_summary": {
+    "event_count": 4,
+    "correlation_count": 14,
+    "findings": [
+      {
+        "statement": "Timeline spans from event EV-001 (USER_LOGIN at 2026-01-15T09:41:02+00:00) to event EV-004 (FILE_CREATE at 2026-01-15T09:41:31+00:00).",
+        "supporting_event_ids": [
+          "EV-001",
+          "EV-004"
+        ],
+        "rule": "timeline_span"
+      },
+      {
+        "statement": "6 event pair(s) are potentially related via the 'same_host' rule. This indicates a possible relationship only -- not confirmed cause or intent.",
+        "supporting_event_ids": [
+          "EV-001",
+          "EV-002"
+        ],
+        "rule": "same_host"
+      },
+      {
+        "statement": "6 event pair(s) are potentially related via the 'same_actor' rule. This indicates a possible relationship only -- not confirmed cause or intent.",
+        "supporting_event_ids": [
+          "EV-001",
+          "EV-002"
+        ],
+        "rule": "same_actor"
+      },
+      {
+        "statement": "1 event pair(s) are potentially related via the 'parent_child_process' rule. This indicates a possible relationship only -- not confirmed cause or intent.",
+        "supporting_event_ids": [
+          "EV-002",
+          "EV-003"
+        ],
+        "rule": "parent_child_process"
+      },
+      {
+        "statement": "1 event pair(s) are potentially related via the 'same_process' rule. This indicates a possible relationship only -- not confirmed cause or intent.",
+        "supporting_event_ids": [
+          "EV-003",
+          "EV-004"
+        ],
+        "rule": "same_process"
+      }
+    ],
+    "requires_investigator_review": true,
+    "notes": [
+      "This summary is investigative assistance only.",
+      "All findings must be independently verified by a human investigator.",
+      "No external AI/LLM service was used to generate this summary (Phase 1)."
+    ]
+  }
+};
+
+  function fmtTime(iso) {
+    const d = new Date(iso);
+    return d.toISOString().replace('T', ' ').replace('.000Z', 'Z');
+  }
+
+  function render(data) {
+    const { timeline, ai_summary } = data;
+    const events = timeline.events;
+    const correlations = timeline.correlations;
+
+    document.getElementById('stat-events').textContent = events.length;
+    document.getElementById('stat-links').textContent = correlations.length;
+
+    if (events.length) {
+      const first = new Date(events[0].timestamp);
+      const last = new Date(events[events.length - 1].timestamp);
+      const seconds = Math.round((last - first) / 1000);
+      document.getElementById('stat-span').textContent = seconds + 's';
+    }
+
+    document.getElementById('disclaimer').textContent =
+      'Correlation links show potentially related events based on a named rule. ' +
+      'They are not a claim of cause or intent. Every finding requires investigator review.';
+
+    const notes = ai_summary.notes || [];
+    document.getElementById('ai-note-1').textContent = notes[0] || '';
+    document.getElementById('ai-note-2').textContent = notes[2] || '';
+
+    const tbody = document.getElementById('rows');
+    tbody.innerHTML = '';
+
+    events.forEach(ev => {
+      const related = correlations.filter(
+        c => c.event_id_a === ev.event_id || c.event_id_b === ev.event_id
+      );
+
+      const detailParts = [];
+      if (ev.host) detailParts.push('host: ' + ev.host);
+      if (ev.actor) detailParts.push('actor: ' + ev.actor);
+      if (ev.process) detailParts.push('process: ' + ev.process);
+      if (ev.file_path) detailParts.push('file: ' + ev.file_path);
+
+      const relatedHtml = related.length
+        ? related.map(c => {
+            const other = c.event_id_a === ev.event_id ? c.event_id_b : c.event_id_a;
+            return `<div class="related-item"><b>${other}</b> — <span class="related-rule">${c.rule}</span></div>`;
+          }).join('')
+        : '<span class="related-item">none</span>';
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="ev-id">${ev.event_id}</td>
+        <td class="ts">${fmtTime(ev.timestamp)}</td>
+        <td>
+          <div class="etype">${ev.event_type}</div>
+          ${detailParts.length ? `<div class="detail-line">${detailParts.join(' · ')}</div>` : ''}
+        </td>
+        <td><span class="sev sev-${ev.severity || 'info'}">${ev.severity || 'n/a'}</span></td>
+        <td class="related">${relatedHtml}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  render(DEMO_DATA);
+</script>
+</body>
+</html>
