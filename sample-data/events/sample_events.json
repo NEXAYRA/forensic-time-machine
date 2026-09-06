@@ -1,0 +1,49 @@
+[
+  {
+    "event_id": "EV-003",
+    "timestamp": "2026-01-15T09:41:23+00:00",
+    "event_type": "script_execution",
+    "source": "edr_agent",
+    "host": "WKSTN-07",
+    "actor": "jdoe",
+    "process": "powershell.exe",
+    "parent_process_id": "cmd.exe",
+    "confidence": 0.9,
+    "severity": "high",
+    "metadata": {"script_name": "update_check.ps1"}
+  },
+  {
+    "event_id": "EV-001",
+    "timestamp": "2026-01-15T09:41:02+00:00",
+    "event_type": "user_login",
+    "source": "auth.log",
+    "host": "WKSTN-07",
+    "actor": "jdoe",
+    "confidence": 1.0,
+    "severity": "info",
+    "network": {"src_ip": "10.0.0.15"}
+  },
+  {
+    "event_id": "EV-004",
+    "timestamp": "2026-01-15T09:41:31+00:00",
+    "event_type": "file_create",
+    "source": "edr_agent",
+    "host": "WKSTN-07",
+    "actor": "jdoe",
+    "process": "powershell.exe",
+    "file_path": "C:\\Users\\jdoe\\AppData\\Local\\Temp\\payload.tmp",
+    "confidence": 0.85,
+    "severity": "medium"
+  },
+  {
+    "event_id": "EV-002",
+    "timestamp": "2026-01-15T09:41:18+00:00",
+    "event_type": "process_start",
+    "source": "edr_agent",
+    "host": "WKSTN-07",
+    "actor": "jdoe",
+    "process": "cmd.exe",
+    "confidence": 0.95,
+    "severity": "low"
+  }
+]
