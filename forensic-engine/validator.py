@@ -1,67 +1,53 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
-from event_schema import ForensicEvent
-
-EVENT_TYPE_ALIASES = {
-    "login": "USER_LOGIN",
-    "user login": "USER_LOGIN",
-    "user_login": "USER_LOGIN",
-    "logout": "USER_LOGOUT",
-    "user_logout": "USER_LOGOUT",
-    "process start": "PROCESS_START",
-    "process_start": "PROCESS_START",
-    "process launch": "PROCESS_START",
-    "script execution": "SCRIPT_EXECUTION",
-    "script_execution": "SCRIPT_EXECUTION",
-    "file create": "FILE_CREATE",
-    "file_create": "FILE_CREATE",
-    "file created": "FILE_CREATE",
-    "file modify": "FILE_MODIFY",
-    "file_modify": "FILE_MODIFY",
-    "network connection": "NETWORK_CONNECTION",
-    "network_connection": "NETWORK_CONNECTION",
-}
+REQUIRED_FIELDS = ("event_id", "timestamp", "event_type", "source")
+VALID_SEVERITIES = {"info", "low", "medium", "high", "critical"}
 
 
-def normalize_event_type(raw_type: str) -> str:
-    key = raw_type.strip().lower()
-    return EVENT_TYPE_ALIASES.get(key, raw_type.strip().upper().replace(" ", "_"))
+@dataclass
+class ValidationResult:
+    is_valid: bool
+    errors: List[str]
+    record: Dict[str, Any]
 
 
-def normalize_event(record: Dict[str, Any]) -> ForensicEvent:
-    timestamp = record["timestamp"]
-    if isinstance(timestamp, str):
-        timestamp = datetime.fromisoformat(timestamp)
+def validate_event(record: Dict[str, Any]) -> ValidationResult:
+    errors: List[str] = []
 
-    event_id = record["event_id"]
+    for field_name in REQUIRED_FIELDS:
+        value = record.get(field_name)
+        if value is None or (isinstance(value, str) and not value.strip()):
+            errors.append(f"Missing required field: '{field_name}'")
 
-    return ForensicEvent(
-        event_id=event_id,
-        timestamp=timestamp,
-        event_type=normalize_event_type(record["event_type"]),
-        source=record["source"],
-        host=record.get("host"),
-        actor=record.get("actor"),
-        process=record.get("process"),
-        file_path=record.get("file_path"),
-        parent_process_id=record.get("parent_process_id"),
-        network=record.get("network"),
-        confidence=_as_float_or_none(record.get("confidence")),
-        severity=record.get("severity"),
-        evidence_ref=event_id,
-        raw_evidence=dict(record),
-        metadata=record.get("metadata", {}) or {},
-    )
+    timestamp = record.get("timestamp")
+    if timestamp is not None:
+        if isinstance(timestamp, str):
+            try:
+                datetime.fromisoformat(timestamp)
+            except ValueError:
+                errors.append(f"Invalid timestamp format: '{timestamp}'")
+        elif not isinstance(timestamp, datetime):
+            errors.append(f"Invalid timestamp type: {type(timestamp).__name__}")
+
+    confidence = record.get("confidence")
+    if confidence is not None:
+        if not isinstance(confidence, (int, float)) or isinstance(confidence, bool):
+            errors.append(f"Invalid confidence type: {type(confidence).__name__}")
+        elif not (0.0 <= float(confidence) <= 1.0):
+            errors.append(f"Invalid confidence value: {confidence} (must be 0.0-1.0)")
+
+    severity = record.get("severity")
+    if severity is not None and severity not in VALID_SEVERITIES:
+        errors.append(
+            f"Invalid severity value: '{severity}' (must be one of {sorted(VALID_SEVERITIES)})"
+        )
+
+    return ValidationResult(is_valid=not errors, errors=errors, record=record)
 
 
-def normalize_events(records: List[Dict[str, Any]]) -> List[ForensicEvent]:
-    return [normalize_event(r) for r in records]
-
-
-def _as_float_or_none(value: Any) -> Optional[float]:
-    if value is None:
-        return None
-    return float(value)
+def validate_events(records: List[Dict[str, Any]]) -> List[ValidationResult]:
+    return [validate_event(r) for r in records]
