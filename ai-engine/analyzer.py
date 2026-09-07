@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
@@ -41,7 +39,9 @@ class InvestigationSummary:
 def analyze_timeline(timeline: Timeline) -> InvestigationSummary:
     if not timeline.events:
         return InvestigationSummary(
-            event_count=0, correlation_count=0, findings=[],
+            event_count=0,
+            correlation_count=0,
+            findings=[],
             requires_investigator_review=True,
             notes=["No events were provided; nothing to analyze."],
         )
@@ -87,4 +87,5 @@ def analyze_timeline(timeline: Timeline) -> InvestigationSummary:
             "All findings must be independently verified by a human investigator.",
             "No external AI/LLM service was used to generate this summary (Phase 1).",
         ],
-          )
+    )
+Reminder: folder is ai_engine (underscore), not ai-engine — hyphens aren't valid in Python package names.
