@@ -88,4 +88,3 @@ def analyze_timeline(timeline: Timeline) -> InvestigationSummary:
             "No external AI/LLM service was used to generate this summary (Phase 1).",
         ],
     )
-Clear an error and give correct code
