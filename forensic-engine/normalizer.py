@@ -1,70 +1,101 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-# Map known aliases to canonical event type names.
-# Unknown event types pass through unchanged.
+from event_schema import ForensicEvent
+
+
 EVENT_TYPE_ALIASES = {
-    "login": "authentication",
-    "signin": "authentication",
-    "logon": "authentication",
-    "file_write": "file_modification",
-    "file_change": "file_modification",
-    "proc_start": "process_execution",
-    "process_start": "process_execution",
-    "net_conn": "network_connection",
-    "netconn": "network_connection",
+    "login": "USER_LOGIN",
+    "user login": "USER_LOGIN",
+    "user_login": "USER_LOGIN",
+    "logout": "USER_LOGOUT",
+    "user logout": "USER_LOGOUT",
+    "user_logout": "USER_LOGOUT",
+    "process start": "PROCESS_START",
+    "process_start": "PROCESS_START",
+    "process launch": "PROCESS_START",
+    "script execution": "SCRIPT_EXECUTION",
+    "script_execution": "SCRIPT_EXECUTION",
+    "file create": "FILE_CREATE",
+    "file_create": "FILE_CREATE",
+    "file created": "FILE_CREATE",
+    "file modify": "FILE_MODIFY",
+    "file_modify": "FILE_MODIFY",
+    "file modified": "FILE_MODIFY",
+    "network connection": "NETWORK_CONNECTION",
+    "network_connection": "NETWORK_CONNECTION",
 }
 
-OPTIONAL_FIELDS = ("confidence", "severity", "actor", "host", "process", "file", "evidence_reference")
 
+def normalize_event_type(raw_type: str) -> str:
+    key = raw_type.strip().lower()
 
-@dataclass
-class NormalizedEvent:
-    event_id: str
-    timestamp: str
-    event_type: str
-    source: str
-    confidence: Optional[float] = None
-    severity: Optional[str] = None
-    actor: Optional[str] = None
-    host: Optional[str] = None
-    process: Optional[str] = None
-    file: Optional[str] = None
-    evidence_reference: Optional[str] = None
-    raw: Dict[str, Any] = field(default_factory=dict)
-
-
-def normalize_event_type(event_type: Optional[str]) -> Optional[str]:
-    if event_type is None:
-        return None
-    key = event_type.strip().lower()
-    return EVENT_TYPE_ALIASES.get(key, event_type)
-
-
-def normalize_event(record: Dict[str, Any]) -> NormalizedEvent:
-    event_id = record.get("event_id")
-    timestamp = record.get("timestamp")
-    event_type = normalize_event_type(record.get("event_type"))
-    source = record.get("source")
-
-    normalized = NormalizedEvent(
-        event_id=event_id,
-        timestamp=timestamp,
-        event_type=event_type,
-        source=source,
-        raw=record,
+    return EVENT_TYPE_ALIASES.get(
+        key,
+        raw_type.strip().upper().replace(" ", "_"),
     )
 
-    # Only carry over optional fields if explicitly present.
-    # Never fabricate a value (e.g. confidence) that wasn't in the input.
-    for field_name in OPTIONAL_FIELDS:
-        if field_name in record and record[field_name] is not None:
-            setattr(normalized, field_name, record[field_name])
 
-    return normalized
+def normalize_event(
+    record: Dict[str, Any]
+) -> ForensicEvent:
+    timestamp = record["timestamp"]
+
+    if isinstance(timestamp, str):
+        timestamp = datetime.fromisoformat(timestamp)
+
+    event_id = record["event_id"]
+
+    evidence_ref = record.get(
+        "evidence_reference",
+        record.get("evidence_ref", event_id),
+    )
+
+    severity = record.get("severity")
+
+    if isinstance(severity, str):
+        severity = severity.lower()
+
+    return ForensicEvent(
+        event_id=event_id,
+        timestamp=timestamp,
+        event_type=normalize_event_type(
+            record["event_type"]
+        ),
+        source=record["source"],
+        host=record.get("host"),
+        actor=record.get("actor"),
+        process=record.get("process"),
+        file_path=record.get("file_path"),
+        parent_process_id=record.get(
+            "parent_process_id"
+        ),
+        network=record.get("network"),
+        confidence=_as_float_or_none(
+            record.get("confidence")
+        ),
+        severity=severity,
+        evidence_ref=evidence_ref,
+        raw_evidence=dict(record),
+        metadata=record.get("metadata", {}) or {},
+    )
 
 
-def normalize_events(records: List[Dict[str, Any]]) -> List[NormalizedEvent]:
-    return [normalize_event(r) for r in records]
+def normalize_events(
+    records: List[Dict[str, Any]]
+) -> List[ForensicEvent]:
+    return [
+        normalize_event(record)
+        for record in records
+    ]
+
+
+def _as_float_or_none(
+    value: Any
+) -> Optional[float]:
+    if value is None:
+        return None
+
+    return float(value)
